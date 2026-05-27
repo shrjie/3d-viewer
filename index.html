@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3x3x3 方塊建構器 - 三視圖</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+
+body {
+  font-family: 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', Arial, sans-serif;
+  background: #fff;
+  color: #2c3e50;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  grid-template-rows: 52px 1fr 30px;
+  height: 100vh;
+  min-width: 0;
+  min-height: 0;
+}
+
+header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid #d0d7de;
+  user-select: none;
+  z-index: 20;
+}
+
+header .logo {
+  font-weight: 700;
+  font-size: 16px;
+  color: #1a73e8;
+  letter-spacing: 1px;
+  margin-right: 4px;
+}
+
+.layer-selector {
+  display: flex;
+  gap: 4px;
+}
+
+.layer-btn, .action-btn {
+  padding: 5px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #f6f8fa;
+  color: #57606a;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.layer-btn:hover, .action-btn:hover { background: #eaeef2; }
+.layer-btn.active {
+  background: #1a73e8;
+  border-color: #1a73e8;
+  color: #fff;
+}
+
+.header-sep {
+  width: 1px;
+  height: 24px;
+  background: #d0d7de;
+  flex-shrink: 0;
+}
+
+.action-btn.danger { color: #d6336c; }
+.action-btn.danger:hover { background: #ffe8f0; }
+
+.counter {
+  margin-left: auto;
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+}
+.counter strong { color: #333; font-weight: 600; }
+
+#main-view {
+  position: relative;
+  background: #fff;
+  min-width: 0;
+  min-height: 0;
+  cursor: grab;
+  touch-action: none;
+}
+#main-view:active { cursor: grabbing; }
+
+#side-views {
+  display: grid;
+  grid-template-rows: 1fr 1fr 1fr;
+  border-left: 1px solid #d0d7de;
+  background: #fff;
+}
+
+.view-panel {
+  position: relative;
+  min-height: 0;
+  border-bottom: 1px solid #e8ecf0;
+  background: #f8f9fa;
+}
+.view-panel:last-child { border-bottom: none; }
+
+.view-panel .label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  background: rgba(255,255,255,0.85);
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #666;
+  z-index: 10;
+  pointer-events: none;
+  border: 1px solid #ddd;
+  user-select: none;
+}
+
+.view-panel canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #999;
+  background: #fff;
+  border-top: 1px solid #e8ecf0;
+  user-select: none;
+}
+
+.help-text {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #999;
+  pointer-events: none;
+  z-index: 5;
+  background: rgba(255,255,255,0.7);
+  padding: 4px 14px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <span class="logo">三視圖</span>
+    <div class="layer-selector">
+      <button class="layer-btn active" data-layer="0">底層</button>
+      <button class="layer-btn" data-layer="1">中層</button>
+      <button class="layer-btn" data-layer="2">頂層</button>
+    </div>
+    <div class="header-sep"></div>
+    <button class="action-btn danger" id="btn-clear">清除</button>
+    <button class="action-btn" id="btn-lshape">L形</button>
+    <button class="action-btn" id="btn-stairs">階梯</button>
+    <button class="action-btn" id="btn-full">全滿</button>
+    <span class="counter" id="counter">方塊: <strong>0</strong> / 27</span>
+  </header>
+  <div id="main-view"><div class="help-text">選擇層數後點擊網格放置方塊</div></div>
+  <div id="side-views">
+    <div class="view-panel" id="panel-top"><div class="label">俯視圖 Top</div></div>
+    <div class="view-panel" id="panel-front"><div class="label">前視圖 Front</div></div>
+    <div class="view-panel" id="panel-right"><div class="label">右側視圖 Right</div></div>
+  </div>
+  <footer>程式設計：黃世杰 opencode</footer>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ─── Scene ──────────────────────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+// ─── Lights ─────────────────────────────────────────────────────────────
+const ambient = new THREE.AmbientLight(0xffffff, 1.0);
+scene.add(ambient);
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+keyLight.position.set(5, 10, 7);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xccddff, 0.7);
+fillLight.position.set(-4, 2, -5);
+scene.add(fillLight);
+
+// ─── Grid floor ─────────────────────────────────────────────────────────
+const gridHelper = new THREE.GridHelper(4, 4, 0xccd2da, 0xdee4ec);
+gridHelper.position.y = -1.52;
+scene.add(gridHelper);
+
+// Invisible ground plane for raycasting (larger than grid)
+const groundGeo = new THREE.PlaneGeometry(4, 4);
+const groundMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+const groundPlane = new THREE.Mesh(groundGeo, groundMat);
+groundPlane.rotation.x = -Math.PI / 2;
+groundPlane.position.y = -1.52;
+scene.add(groundPlane);
+
+// ─── Build 3x3x3 positions ─────────────────────────────────────────────
+const SPACING = 1.0;
+const SIZE = 0.92;
+
+const COLORS = {
+  right: 0xFF2D55,
+  left:  0x30D158,
+  top:   0xFFD60A,
+  bottom:0xBF5AF2,
+  front: 0x007AFF,
+  back:  0xFF9F0A,
+};
+
+const boxGeo = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
+const edgeGeo = new THREE.EdgesGeometry(boxGeo);
+
+const GHOST_EDGE_COLOR  = 0xb0bec5;
+const GHOST_EDGE_OPACITY = 0.5;
+const GHOST_MESH_OPACITY = 0.06;
+const ACTIVE_EDGE_COLOR  = 0x546e7a;
+const ACTIVE_EDGE_OPACITY = 0.5;
+
+const cubeMeshes = [];
+const cubeEdges = [];
+
+function eachMat(mesh, fn) {
+  const arr = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  for (const m of arr) fn(m);
+}
+
+function setGhost(mesh, edge) {
+  eachMat(mesh, (m) => {
+    m.transparent = true;
+    m.opacity = GHOST_MESH_OPACITY;
+    m.depthWrite = false;
+  });
+  edge.material.color.setHex(GHOST_EDGE_COLOR);
+  edge.material.opacity = GHOST_EDGE_OPACITY;
+  mesh.userData.active = false;
+}
+
+function setSolid(mesh, edge) {
+  eachMat(mesh, (m) => {
+    m.transparent = false;
+    m.opacity = 1.0;
+    m.depthWrite = true;
+  });
+  edge.material.color.setHex(ACTIVE_EDGE_COLOR);
+  edge.material.opacity = ACTIVE_EDGE_OPACITY;
+  mesh.userData.active = true;
+}
+
+for (let i = 0; i < 3; i++) {
+  for (let j = 0; j < 3; j++) {
+    for (let k = 0; k < 3; k++) {
+      const mats = [
+        new THREE.MeshLambertMaterial({ color: COLORS.right }),
+        new THREE.MeshLambertMaterial({ color: COLORS.left }),
+        new THREE.MeshLambertMaterial({ color: COLORS.top }),
+        new THREE.MeshLambertMaterial({ color: COLORS.bottom }),
+        new THREE.MeshLambertMaterial({ color: COLORS.front }),
+        new THREE.MeshLambertMaterial({ color: COLORS.back }),
+      ];
+
+      const mesh = new THREE.Mesh(boxGeo, mats);
+      mesh.position.set((i - 1) * SPACING, (j - 1) * SPACING, (k - 1) * SPACING);
+      mesh.userData.grid = { i, j, k };
+      scene.add(mesh);
+      cubeMeshes.push(mesh);
+
+      const line = new THREE.LineSegments(
+        edgeGeo,
+        new THREE.LineBasicMaterial({ color: GHOST_EDGE_COLOR, transparent: true, opacity: GHOST_EDGE_OPACITY })
+      );
+      line.position.copy(mesh.position);
+      scene.add(line);
+      cubeEdges.push(line);
+
+      setGhost(mesh, line);
+    }
+  }
+}
+
+// ─── Layer selection ────────────────────────────────────────────────────
+let selectedLayer = 0;
+
+const layerBtns = document.querySelectorAll('.layer-btn');
+layerBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    layerBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedLayer = parseInt(btn.dataset.layer, 10);
+  });
+});
+
+// ─── Toggle cubelet ─────────────────────────────────────────────────────
+function toggleCubelet(mesh) {
+  const idx = cubeMeshes.indexOf(mesh);
+  if (idx === -1) return;
+  if (mesh.userData.active) {
+    setGhost(mesh, cubeEdges[idx]);
+  } else {
+    setSolid(mesh, cubeEdges[idx]);
+  }
+  updateCounter();
+}
+
+function setAllActive(active) {
+  for (let idx = 0; idx < cubeMeshes.length; idx++) {
+    const mesh = cubeMeshes[idx];
+    if (mesh.userData.active !== active) {
+      if (active) setSolid(mesh, cubeEdges[idx]);
+      else        setGhost(mesh, cubeEdges[idx]);
+    }
+  }
+  updateCounter();
+}
+
+// ─── Counter ──────────────────────────────────────────────────────────
+const counterEl = document.getElementById('counter');
+
+function updateCounter() {
+  const n = cubeMeshes.filter(m => m.userData.active).length;
+  counterEl.innerHTML = `方塊: <strong>${n}</strong> / 27`;
+}
+
+// ─── Preset shapes ────────────────────────────────────────────────────
+function loadPreset(predicate) {
+  for (let idx = 0; idx < cubeMeshes.length; idx++) {
+    const mesh = cubeMeshes[idx];
+    const g = mesh.userData.grid;
+    const shouldBeActive = predicate(g.i, g.j, g.k);
+    if (mesh.userData.active !== shouldBeActive) {
+      if (shouldBeActive) setSolid(mesh, cubeEdges[idx]);
+      else                setGhost(mesh, cubeEdges[idx]);
+    }
+  }
+  updateCounter();
+}
+
+document.getElementById('btn-clear').addEventListener('click', () => setAllActive(false));
+document.getElementById('btn-full').addEventListener('click', () => setAllActive(true));
+document.getElementById('btn-lshape').addEventListener('click', () => {
+  loadPreset((i, j, k) => (i === 0 || k === 2));
+});
+document.getElementById('btn-stairs').addEventListener('click', () => {
+  loadPreset((i, j, k) => j <= i && i <= k);
+});
+
+// ─── Cameras ────────────────────────────────────────────────────────────
+const mainCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 30);
+mainCamera.position.set(4.5, 3.5, 5.5);
+mainCamera.lookAt(0, 0, 0);
+
+function orthoCam(pos, target, up) {
+  const s = 3.6;
+  const cam = new THREE.OrthographicCamera(-s, s, s, -s, 0.1, 20);
+  cam.position.copy(pos);
+  if (up) cam.up.copy(up);
+  cam.lookAt(target);
+  return cam;
+}
+
+const topCam = orthoCam(new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, 0, 0), new THREE.Vector3(-1, 0, 0));
+const frontCam = orthoCam(new THREE.Vector3(0, 0, 10), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
+const rightCam = orthoCam(new THREE.Vector3(10, 0, 0), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
+
+// ─── Containers & Renderers ────────────────────────────────────────────
+const containers = {
+  main:  document.getElementById('main-view'),
+  top:   document.getElementById('panel-top'),
+  front: document.getElementById('panel-front'),
+  right: document.getElementById('panel-right'),
+};
+
+function createRenderer(container) {
+  const r = new THREE.WebGLRenderer({ antialias: true });
+  r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  r.setClearColor(0xffffff);
+  container.appendChild(r.domElement);
+  return r;
+}
+
+const rendMain  = createRenderer(containers.main);
+const rendTop   = createRenderer(containers.top);
+const rendFront = createRenderer(containers.front);
+const rendRight = createRenderer(containers.right);
+
+// ─── OrbitControls (main view only) ─────────────────────────────────────
+const controls = new OrbitControls(mainCamera, rendMain.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 3;
+controls.maxDistance = 15;
+controls.target.set(0, 0, 0);
+
+// ─── Raycasting / click handling ────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function handleClick(event) {
+  const rect = containers.main.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, mainCamera);
+
+  // 1) Check if clicking an existing block on the selected layer
+  const hits = raycaster.intersectObjects(cubeMeshes, false);
+  for (const hit of hits) {
+    const mesh = hit.object;
+    if (mesh.userData.grid.j === selectedLayer) {
+      toggleCubelet(mesh);
+      return;
+    }
+  }
+
+  // 2) Place new block on the selected layer via plane intersection
+  const layerY = selectedLayer - 1;
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -layerY);
+  const target = new THREE.Vector3();
+  const pt = raycaster.ray.intersectPlane(plane, target);
+  if (!pt) return;
+
+  const gi = Math.round(pt.x);
+  const gk = Math.round(pt.z);
+  if (Math.abs(gi) > 1 || Math.abs(gk) > 1) return;
+
+  for (const mesh of cubeMeshes) {
+    const g = mesh.userData.grid;
+    if (g.i === gi + 1 && g.j === selectedLayer && g.k === gk + 1) {
+      toggleCubelet(mesh);
+      return;
+    }
+  }
+}
+
+// ─── Pointer interaction on main view ───────────────────────────────────
+let isDragging = false;
+let downPos = null;
+
+rendMain.domElement.addEventListener('pointerdown', (e) => {
+  isDragging = true;
+  downPos = { x: e.clientX, y: e.clientY };
+  rendMain.domElement.setPointerCapture(e.pointerId);
+});
+
+rendMain.domElement.addEventListener('pointermove', (e) => {
+  // OrbitControls handles camera rotation during drag
+});
+
+rendMain.domElement.addEventListener('pointerup', (e) => {
+  if (!isDragging) return;
+  isDragging = false;
+  rendMain.domElement.releasePointerCapture(e.pointerId);
+
+  const dx = e.clientX - downPos.x;
+  const dy = e.clientY - downPos.y;
+  if (Math.hypot(dx, dy) < 5) {
+    handleClick(e);
+  }
+});
+
+rendMain.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ─── Resize ─────────────────────────────────────────────────────────────
+function resizeRenderer(renderer, container, cam, isOrtho) {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  if (w === 0 || h === 0) return;
+  renderer.setSize(w, h, false);
+  if (isOrtho) {
+    const s = 3.6;
+    const asp = w / h;
+    if (asp >= 1) {
+      cam.left = -s * asp; cam.right = s * asp;
+      cam.top = s; cam.bottom = -s;
+    } else {
+      cam.left = -s; cam.right = s;
+      cam.top = s / asp; cam.bottom = -s / asp;
+    }
+    cam.updateProjectionMatrix();
+  } else {
+    cam.aspect = w / h;
+    cam.updateProjectionMatrix();
+  }
+}
+
+function resizeAll() {
+  resizeRenderer(rendMain, containers.main, mainCamera, false);
+  resizeRenderer(rendTop, containers.top, topCam, true);
+  resizeRenderer(rendFront, containers.front, frontCam, true);
+  resizeRenderer(rendRight, containers.right, rightCam, true);
+}
+
+window.addEventListener('resize', resizeAll);
+const ro = new ResizeObserver(resizeAll);
+ro.observe(containers.main);
+ro.observe(containers.top);
+ro.observe(containers.front);
+ro.observe(containers.right);
+resizeAll();
+
+// ─── Animate ────────────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  rendMain.render(scene, mainCamera);
+  rendTop.render(scene, topCam);
+  rendFront.render(scene, frontCam);
+  rendRight.render(scene, rightCam);
+}
+
+animate();
+
+// ─── Key bindings ───────────────────────────────────────────────────────
+window.addEventListener('keydown', (e) => {
+  const key = e.key.toLowerCase();
+  if (key === 'r') {
+    controls.target.set(0, 0, 0);
+    mainCamera.position.set(4.5, 3.5, 5.5);
+    controls.update();
+  }
+  if (key === 'a') setAllActive(true);
+  if (key === 's') setAllActive(false);
+});
+updateCounter();
+</script>
+</body>
+</html>
